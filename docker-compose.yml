@@ -1,0 +1,165 @@
+# ===========================================
+# SAGA CHECKOUT - Docker Compose Configuration
+# ===========================================
+#
+# Services:
+#   - zookeeper: Kafka cluster manager
+#   - kafka: Message broker for event-driven communication
+#   - kafka-ui: Web UI for Kafka (development)
+#   - mongodb: Database for all microservices
+#   - mongo-express: Web UI for MongoDB (development)
+#
+# Usage:
+#   Start:   docker compose up -d
+#   Stop:    docker compose down
+#   Logs:    docker compose logs -f [service-name]
+#   Reset:   docker compose down -v (removes volumes)
+#
+# ===========================================
+
+version: "3.8"
+
+services:
+  # ===========================================
+  # Zookeeper - Kafka Cluster Manager
+  # ===========================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: saga-zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    networks:
+      - saga-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Kafka - Message Broker
+  # ===========================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: saga-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Listeners for internal (Docker) and external (host) access
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Auto-create topics (for development)
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - saga-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================
+  # Kafka UI - Web Interface for Kafka
+  # ===========================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: saga-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: saga-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - saga-network
+
+  # ===========================================
+  # MongoDB - Primary Database
+  # ===========================================
+  mongodb:
+    image: mongo:6.0
+    container_name: saga-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: saga_orders
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - saga-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================
+  # Mongo Express - MongoDB Web UI
+  # ===========================================
+  mongo-express:
+    image: mongo-express:1.0.0-alpha
+    container_name: saga-mongo-ui
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - saga-network
+
+# ===========================================
+# Volumes - Persistent Storage
+# ===========================================
+volumes:
+  zookeeper_data:
+    driver: local
+  zookeeper_log:
+    driver: local
+  kafka_data:
+    driver: local
+  mongodb_data:
+    driver: local
+
+# ===========================================
+# Networks - Service Communication
+# ===========================================
+networks:
+  saga-network:
+    driver: bridge
+    name: saga-network

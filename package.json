@@ -1,0 +1,36 @@
+{
+  "name": "saga-checkout",
+  "version": "1.0.0",
+  "description": "Distributed transaction implementation using Saga Orchestration pattern with Kafka",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "kafkaBroker"
+  ],
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:reset": "docker compose down -v && docker compose up -d",
+    "kafka:create-topics": "npm run start --workspace=kafkaBroker"
+  },
+  "keywords": [
+    "saga",
+    "microservices",
+    "distributed-transactions",
+    "kafka",
+    "typescript",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "devDependencies": {},
+  "type": "commonjs"
+}
