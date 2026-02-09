@@ -1,8 +1,8 @@
-# Saga Checkout - Distributed Transaction Pattern with Kafka
+#  Saga Transaction Pattern with Kafka
 
 A complete implementation of the **Saga Orchestration Pattern** for handling distributed transactions in a microservices architecture using Apache Kafka.
 
-## 🎯 Project Overview
+## Project Overview
 
 This project demonstrates how to handle a checkout process across multiple microservices while maintaining data consistency, even when individual services fail.
 
@@ -82,7 +82,7 @@ cd kafkaBroker && npm install && npm run create-topics
 | Kafka UI | http://localhost:8080 |
 | Mongo Express | http://localhost:8081 (admin/admin123) |
 
-## 📊 Saga Flow
+## Saga Flow
 
 ### Kafka Topics
 
@@ -122,18 +122,3 @@ If PAYMENT fails:
      │
      └──► ORDER_SERVICE ──────► Cancel Order (COMPENSATE)
 ```
-
-## 📁 Project Structure
-
-```
-saga-checkout/
-├── services/
-│   ├── order-service/       # Order management
-│   ├── inventory-service/   # Stock management
-│   ├── payment-service/     # Payment processing
-│   ├── orchestrator-service/# Saga coordinator
-│   └── shared/              # Shared types & Kafka utilities
-├── kafkaBroker/             # Topic management
-├── docker/                  # Docker configurations
-├── scripts/                 # Utility scripts
-└── docker-compose.yml
