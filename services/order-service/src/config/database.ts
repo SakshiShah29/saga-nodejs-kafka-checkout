@@ -2,9 +2,6 @@ import mongoose from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/saga-orders';
 
-const options: mongoose.ConnectOptions = {
-   
-};
 
 export async function connectDatabase():Promise<void> {
     try {
