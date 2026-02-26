@@ -251,4 +251,196 @@ export async function reserveInventory(
   }
 }
 
+/**
+ * RELEASE INVENTORY — Saga Compensation
+ *
+ * This is the COMPENSATING TRANSACTION. When the orchestrator
+ * detects a failure (e.g., payment failed), it sends
+ * RELEASE_INVENTORY to undo the reservation.
+ *
+ * We:
+ * 1. Find the active reservation for this saga
+ * 2. Add the reserved quantities back to availableStock
+ * 3. Mark the reservation as RELEASED
+ */
+export async function releaseInventory(
+  request: ReleaseInventoryRequest
+): Promise<InventoryResult> {
+  const { sagaId, orderId } = request;
+  console.log(
+    `[Inventory] 🔄 Releasing inventory for saga: ${sagaId}, order: ${orderId}`
+  );
+  try {
+    // step 1: find active reservation
+    const reservation = await Reservation.findOne({
+      sagaId,
+      orderId,
+      status: ReservationStatus.ACTIVE,
+    }).exec();
 
+    if (!reservation) {
+      console.warn(
+        `[Inventory] No active reservation found for saga: ${sagaId}, order: ${orderId}`
+      );
+      return {
+        success: true,
+        data: { message: "No active reservation to release", sagaId, orderId },
+      };
+    }
+
+    // step 2: release stock
+    for (const item of reservation.items) {
+      const updatedProduct = await Product.findOneAndUpdate(
+        { productId: item.productId },
+        {
+          $inc: {
+            reservedStock: -item.quantity,
+            availableStock: item.quantity,
+          },
+        },
+        { new: true }
+      ).exec();
+
+      if (updatedProduct) {
+        console.log(
+          `[Inventory] Released ${item.quantity} of ${updatedProduct.productName} (ID: ${item.productId}). New available stock: ${updatedProduct.availableStock}`
+        );
+      } else {
+        console.warn(
+          `[Inventory] Failed to find product ${item.productId} while releasing inventory. Manual intervention may be required.`
+        );
+      }
+    }
+
+    // step 3: mark reservation as released
+    reservation.status = ReservationStatus.RELEASED;
+    reservation.releasedAt = new Date();
+    reservation.failureReason = "Saga compensation - reservation released";
+    await reservation.save();
+
+    console.log(
+      `[Inventory] Inventory released successfully for order ${orderId}. Reservation ID: ${reservation.reservationId}`
+    );
+    console.log(
+      `[Inventory] Inventory released successfully for saga: ${sagaId}, order: ${orderId}. Reservation ID: ${reservation.reservationId}`
+    );
+    return {
+      success: true,
+      data: {
+        reservationId: reservation.reservationId,
+        sagaId,
+        orderId,
+        status: reservation.status,
+        releaseAt: reservation.releasedAt,
+      },
+    };
+  } catch (error: any) {
+    console.error(
+      `[Inventory] Error releasing inventory for order ${request.orderId}:`,
+      error
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * COMMIT RESERVATION — Saga Success
+ *
+ * When the entire saga completes successfully, the reservation
+ * is "committed" — meaning the stock is permanently deducted.
+ * We deduct from totalStock and mark the reservation as COMMITTED.
+ */
+
+export async function commitReservation(
+  sagaId: string,
+  orderId: string
+): Promise<InventoryResult> {
+  console.log(
+    `[Inventory] Committing reservation for saga: ${sagaId}, order: ${orderId}`
+  );
+  try {
+    const reservation = await Reservation.findOne({
+      sagaId,
+      orderId,
+      status: ReservationStatus.ACTIVE,
+    }).exec();
+    if (!reservation) {
+      return {
+        success: false,
+        error: `No active reservation found for saga: ${sagaId}, order: ${orderId}`,
+      };
+    }
+
+    for (const item of reservation.items) {
+      await Product.findOneAndUpdate(
+        { productId: item.productId },
+        {
+          $inc: {
+            reservedStock: -item.quantity,
+            totalStock: -item.quantity,
+          },
+        }
+      ).exec();
+    }
+
+    reservation.status = ReservationStatus.COMMITTED;
+    reservation.committedAt = new Date();
+    await reservation.save();
+    console.log(
+      `[Inventory] Reservation committed successfully for order ${orderId}. Reservation ID: ${reservation.reservationId}`
+    );
+
+    return {
+      success: true,
+      data: {
+        reservationId: reservation.reservationId,
+        sagaId,
+        orderId,
+        status: reservation.status,
+        committedAt: reservation.committedAt,
+      },
+    };
+  } catch (error: any) {
+    console.error(
+      `[Inventory] Error committing reservation for order ${orderId}:`,
+      error
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getReservationBySagaId(
+  sagaId: string
+): Promise<InventoryResult> {
+  try {
+    const reservation = await Reservation.findOne({ sagaId })
+      .lean<IReservationDocument>()
+      .exec();
+    if (!reservation) {
+      return {
+        success: false,
+        error: `No reservation found for sagaId: ${sagaId}`,
+      };
+    }
+    return { success: true, data: reservation };
+  } catch (error: any) {
+    console.error(
+      `[Inventory] Error fetching reservation for saga ${sagaId}:`,
+      error
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getaAllReservation(): Promise<InventoryResult> {
+  try {
+    const reservations = await Reservation.find()
+      .sort({ createdAt: -1 })
+      .lean<IReservationDocument[]>()
+      .exec();
+    return { success: true, data: reservations };
+  } catch (error: any) {
+    console.error(`[Inventory] Error fetching all reservations:`, error);
+    return { success: false, error: error.message };
+  }
+}
