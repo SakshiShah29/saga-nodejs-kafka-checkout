@@ -5,27 +5,49 @@ import Reservation, {
   IReservationDocument,
 } from "../models/Reservation";
 
-interface ReserveItem {
+export interface ReserveItem {
   productId: string;
   quantity: number;
   price: number;
 }
 
-interface ReserveInventoryRequest {
+export interface ReserveInventoryRequest {
   sagaId: string;
   orderId: string;
   items: ReserveItem[];
 }
 
-interface ReleaseInventoryRequest {
+export interface ReleaseInventoryRequest {
   sagaId: string;
   orderId: string;
 }
 
-interface InventoryResult<T = unknown> {
+export interface InventoryResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+// Response data types for type safety
+export interface ReservationSuccessData {
+  reservationId: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    price: number;
+  }>;
+  sagaId: string;
+  orderId: string;
+  status: string;
+}
+
+export interface ReleaseSuccessData {
+  reservationId: string;
+  sagaId: string;
+  orderId: string;
+  status: string;
+  releaseAt: Date;
 }
 
 export async function getAllProducts(): Promise<InventoryResult> {
@@ -91,8 +113,8 @@ export async function addStock(
   quantity: number
 ): Promise<InventoryResult> {
   try {
-    const product = await Product.findByIdAndUpdate(
-      productId,
+    const product = await Product.findOneAndUpdate(
+      { productId },
       {
         $inc: {
           totalStock: quantity,

@@ -50,6 +50,6 @@ export async function disconnectDatabase(): Promise<void> {
   }
 }
 
-export async function isDatabaseConnected(): Promise<boolean> {
+export function isDatabaseConnected(): boolean {
   return mongoose.connection.readyState === 1;
 }

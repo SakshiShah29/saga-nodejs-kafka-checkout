@@ -1,0 +1,23 @@
+ # ---- Inventory Service ----
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    container_name: saga-inventory-service
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      MONGODB_URI: mongodb://mongodb:27017/saga_inventory
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: inventory-service
+      KAFKA_GROUP_ID: inventory-service-group
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - saga-network
